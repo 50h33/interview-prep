@@ -1,0 +1,25 @@
+# idea
+.idea
+
+# claude
+jobs
+.claude/settings.local.json
+.omc/
+
+# resume (이력서 원본 + profile.md)
+resume
+
+# daily interview log (개인 기록)
+daily
+live-coding
+
+# 준비 진행 기록 (지원 회사·취약 기술·점수가 쌓임 — 공개 레포라 비공개)
+progress/
+memo/*
+!memo/README.md
+
+# obsidian (개인 설정)
+.obsidian/workspace.json
+.obsidian/workspace-mobile.json
+.obsidian/cache
+.trash/
