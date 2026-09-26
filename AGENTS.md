@@ -23,6 +23,7 @@
 ## 파일 접근 범위
 
 - `resume/profile.md`: 요청받은 면접 준비에 필요한 범위에서 읽는다. 이력서 원본(docx/pdf)은 사용자가 요약·프로필 생성을 요청한 경우에만 읽고 `profile.md`를 생성/갱신한다. 원본은 변경하지 않는다.
+- `resume/` 발표자료: 사용자가 발표 분석·면접 연습을 요청하면 지정한 PPTX·발표자 노트를 읽고 해당 폴더에 파생 학습 자료를 작성할 수 있다. PPTX·노트 원본은 수정하지 않는다. 공개 topics에는 일반화한 기술 지식만 남기고 발표 원문·팀 정보·프로젝트 고유 수치는 옮기지 않는다.
 - `jobs/`: 요청받은 공고 등록·회사별 면접 준비에 필요한 공고를 읽고, 등록·갱신 요청 시 해당 `job.md`를 작성한다. 회사별 면접을 요청하면 해당 회사의 세션 기록을 작성할 수 있다. 관련 없는 공고를 변경하지 않는다.
 - `daily/`, `progress/`, `memo/`: 요청된 워크플로우에 따른 기록만 갱신한다. 개인 기록을 공개 문서나 테스트 fixture로 복사하지 않는다.
 - `CONSTRAINTS.md`: 파일 형식 규칙의 기준이다. 규칙 자체 변경은 사용자의 명시적 요청/확인이 필요하다.
@@ -53,6 +54,7 @@
 4. 면접 준비 주제 목록 작성
 
 ## 면접 세션 진행 방법
+- "프로젝트 발표 연습", "발표자료로 기술 면접" → [발표면접](workflows/presentation.md)으로 진행한다. 발표 모드는 공고·profile 없이 발표자료와 노트만으로 시작할 수 있다.
 - "{회사명} 면접 시작" → 해당 `jobs/{폴더}/job.md` 읽고 세션 진행
 - Q&A 전문은 `daily/YYYY-MM-DD.md`에 회차별로 저장한다. 회사별 세션은 `jobs/{회사}/sessions/YYYY-MM-DD-{주제}.md`에 요약과 해당 daily 회차 링크를 추가한다. 같은 내용을 두 군데서 별도 집계하지 않는다.
 - 진행 방식: 질문 → 답변 → 꼬리 질문 → 피드백
@@ -61,6 +63,8 @@
 
 면접 질문 생성, 기술 정리, 면접 세션 진행 시 반드시 아래 순서로 실행한다.
 이것이 로컬 Knowledge Graph + 웹 검색을 조합하는 Harness Engineering 워크플로우다.
+
+발표면접의 로컬 소스는 `workflows/presentation.md`의 발표자료·노트 선택 규칙을 우선한다. 이력서 연계를 요청하지 않았다면 profile·공고를 필수 자료로 읽지 않는다.
 
 ### Step 1 — 로컬 Knowledge Graph 조회 (항상 먼저)
 다음 파일들을 병렬로 읽는다:
@@ -168,6 +172,7 @@ related: [연관기술1, 연관기술2]
 |---|---|---|---|
 | 오늘 질문 뽑아줘 / 오늘질문 | `/오늘질문` | `$prep-today` | [today](workflows/today.md) |
 | 모의면접 시작 / 특정 주제 면접 | `/모의면접` | `$prep-interview` | [interview](workflows/interview.md) |
+| 프로젝트 발표 연습 / 발표 예상 질문 | `/발표면접` | `$prep-presentation` | [presentation](workflows/presentation.md) |
 | 오늘 틀린 것 보강 / 보강 | `/보강` | `$prep-reinforce` | [reinforce](workflows/reinforce.md) |
 | 오늘 마무리 / 마무리 | `/마무리` | `$prep-wrap-up` | [wrap-up](workflows/wrap-up.md) |
 | 주제 정리 / 기술 정리해줘 | `/주제정리` | `$prep-topic` | [topic](workflows/topic.md) |
@@ -210,17 +215,18 @@ python scripts/vault_tools.py check
 AGENTS.md                  공통 규칙과 워크플로우 색인
 CLAUDE.md                  공통 규칙을 불러오는 Claude Code 진입점
 CONSTRAINTS.md             파일 형식·네이밍·링크 규칙
-workflows/                 9개 기능의 공통 본문
+workflows/                 10개 기능의 공통 본문
 .claude/skills/            Claude Code 한국어 커맨드 진입점
 .agents/skills/            Codex prep-* 스킬 진입점
 scripts/vault_tools.py     읽기 전용 검증·측정 도구
+scripts/read_presentation.py PPTX·발표자 노트 추출 도구 (원본 보존)
 tests/                    검증 도구 회귀 테스트
 home.md                   Obsidian 허브
 topics/{기술}/             concepts.md + questions.md (공개)
 daily/                    일일 질문·면접 전문 (비공개)
 progress/                 status.md, entropy.md, memory.md (비공개)
 memo/                     임시 메모 (README만 공개)
-resume/                   이력서 원본과 profile.md (비공개)
+resume/                   이력서·profile.md·발표자료·발표자 노트 (비공개)
 jobs/{회사}/               job.md와 sessions/ (비공개)
 .omx/                     로컬 OMX 실행 상태 (비공개)
 ```

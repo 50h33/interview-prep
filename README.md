@@ -7,6 +7,7 @@ Claude Code 혹은 Codex 기반의 백엔드 개발자 면접 대비 프로젝�
 
 - 공고 링크만 주면 기술 스택 분석 + 내 프로필과의 갭 분석 + 준비 주제 생성
 - 이력서 기반으로 실제 경험과 연결된 심화/꼬리 질문 생성
+- 프로젝트 PPTX와 발표자 노트 기반으로 기술 선택·실험 결과·한계에 대한 발표 꼬리 질문 연습
 - 면접 세션 후 기술별 `concepts.md` / `questions.md` 자동 누적
 - 이력서·공고·면접 기록·준비 현황은 gitignore로 로컬에만 보관
 - Obsidian Knowledge Graph로 기술 간 연결 시각화
@@ -34,6 +35,7 @@ Claude Code는 기존 한국어 슬래시 호출을, Codex는 `prep-` 접두어�
 |------|-------------|-------|
 | 오늘 질문 | `/오늘질문 [회사명]` | `$prep-today [회사명]` |
 | 모의면접 | `/모의면접 [주제]` | `$prep-interview [주제]` |
+| 발표자료 기반 면접 | `/발표면접 [분석\|연습] [자료 경로]` | `$prep-presentation [분석\|연습] [자료 경로]` |
 | 보강 | `/보강` | `$prep-reinforce` |
 | 마무리 | `/마무리` | `$prep-wrap-up` |
 | 주제 정리 | `/주제정리 {주제}` | `$prep-topic {주제}` |
@@ -117,7 +119,7 @@ resume에 넣은 이력서로 profile.md 만들어줘
 | ... | ... | ... | ... |
 ```
 
-> 스킬은 `resume/profile.md`만 읽는다. 원본 파일만 두면 이력서 연계 질문이 생성되지 않는다.
+> 일반 이력서 연계 면접은 `resume/profile.md`를 사용한다. 발표면접은 별도로 지정한 PPTX와 발표자 노트를 직접 사용하며 profile이 없어도 진행할 수 있다.
 
 ### 3. 공고 등록
 Claude Code 또는 Codex에 공고 링크를 붙여넣는다.
@@ -154,6 +156,66 @@ $prep-today → $prep-interview → $prep-reinforce → $prep-wrap-up
 
 ---
 
+## 프로젝트 발표자료로 연습하기
+
+미리캔버스 발표자료를 `.pptx` 파일로 준비하고, 발표자 노트와 함께 `resume/` 아래에 둔다. 루트에 바로 넣어도 되고 프로젝트별 폴더로 나눠도 된다.
+
+```text
+resume/
+└── project/
+    ├── 발표자료.pptx
+    └── 발표자노트.md
+```
+
+노트에 슬라이드 번호와 제목을 적으면 근거를 정확하게 연결하기 쉽다. 꼭 이 형식일 필요는 없으며, 번호가 없으면 노트의 제목·행 번호를 근거로 사용한다.
+
+```markdown
+# 프로젝트 발표자 노트
+
+## 슬라이드 1 — 해결하려는 문제
+발표할 내용과 문제 선정 이유
+
+## 슬라이드 3 — 시스템 설계
+구성 요소, 기술 선택 이유, 비교한 대안
+
+## 슬라이드 7 — 검증 결과
+측정 조건, 비교 기준, 결과의 한계
+
+## 본인 담당 범위
+직접 구현하거나 판단한 부분과 팀원의 담당 부분
+```
+
+Codex:
+
+```text
+$prep-presentation 분석 resume/project
+$prep-presentation 연습 resume/project
+```
+
+Claude Code:
+
+```text
+/발표면접 분석 resume/project
+/발표면접 연습 resume/project
+```
+
+자연어로 “resume의 프로젝트 PPT와 발표자노트로 기술 면접 연습해줘”라고 요청해도 된다. 자료가 여러 개면 파일명을 함께 지정한다.
+
+- **분석**: 슬라이드·노트 근거를 붙인 예상 질문, 핵심 답변 요소, 추가 검증이 필요한 주장과 꼬리 질문을 정리한다.
+- **연습**(기본): 한 번에 한 질문 → 내 답변 → 최대 3개 꼬리 질문 → 피드백·채점 순으로 진행한다. 오늘질문 파일 없이 시작할 수 있다.
+- 기존 채점과 daily 회차 형식으로 기록하므로 보강·마무리·주간회고와 이어진다. 분석만 한 경우 점수나 완료 회차를 만들지 않는다.
+- 원본 PPTX와 노트를 변경하지 않는다. 프로젝트 고유 내용은 비공개 `resume/`, `daily/`에 남기고, 공개 topics에는 일반 기술 지식만 정리한다.
+
+추출 도구를 직접 실행할 수도 있다. 별도 노트가 없으면 `--notes`를 생략한다.
+
+```text
+python scripts/read_presentation.py "resume/project/발표자료.pptx" --notes "resume/project/발표자노트.md"
+```
+
+이 도구는 PPTX의 텍스트·내장 노트와 별도 Markdown 노트를 읽는다. 이미지에 포함된 글자나 도표의 의미는 자동 판독하지 않는다. 그림 중심 슬라이드는 PDF나 이미지도 함께 두면 사용 가능한 뷰어로 확인할 수 있고, 열람이 불가능하면 노트의 설명만 사용한다. 구형 `.ppt`와 PDF는 이 추출 명령의 입력으로 지원하지 않는다.
+
+---
+
 ## 디렉토리 구조
 
 ```
@@ -167,7 +229,7 @@ $prep-today → $prep-interview → $prep-reinforce → $prep-wrap-up
 │   ├── status.md              # 기술별 준비 수준, 우선순위
 │   ├── entropy.md             # 채워야 할 gaps, 불일치 추적
 │   └── memory.md              # 세션 간 연속성
-├── workflows/                 # 9개 기능의 공통 워크플로우 본문
+├── workflows/                 # 10개 기능의 공통 워크플로우 본문
 ├── .claude/skills/            # Claude Code용 한국어 스킬 진입점
 ├── .agents/skills/            # Codex용 prep-* 스킬 진입점
 ├── topics/                    # 기술별 지식 베이스 (자동 누적)
@@ -176,7 +238,7 @@ $prep-today → $prep-interview → $prep-reinforce → $prep-wrap-up
 │       └── questions.md       # 면접 질문 + 모범 답변
 ├── memo/                      # 🔒 빠른 메모 (README만 공개)
 ├── daily/                     # 🔒 일일 면접 기록
-├── resume/                    # 🔒 이력서 원본 + profile.md
+├── resume/                    # 🔒 이력서·profile.md·발표자료·발표자 노트
 └── jobs/                      # 🔒 공고별 준비
     └── {회사명-포지션}/
         ├── job.md

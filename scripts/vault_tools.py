@@ -10,6 +10,7 @@ SKILLS = {
     "today": "오늘질문", "interview": "모의면접", "reinforce": "보강",
     "wrap-up": "마무리", "topic": "주제정리", "coding": "코딩테스트",
     "format": "포맷", "memo": "메모", "weekly": "주간회고",
+    "presentation": "발표면접",
 }
 ROOT = Path(__file__).resolve().parent.parent
 
