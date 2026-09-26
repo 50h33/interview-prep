@@ -1,6 +1,6 @@
 ---
 tags: [architecture, distributed-systems, system-design, msa, backend]
-related: [kafka, redis, kubernetes, mysql, java, cs]
+related: [kafka, redis, kubernetes, mysql, java, cs, ai]
 ---
 
 # Architecture — 분산 시스템 & 시스템 설계 핵심 개념

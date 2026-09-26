@@ -1,6 +1,6 @@
 ---
 tags: [mysql, database, index, query-optimization]
-related: [redis, architecture, elasticsearch, java]
+related: [redis, architecture, elasticsearch, java, cs]
 ---
 
 # MySQL — 핵심 개념 정리

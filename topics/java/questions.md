@@ -1,6 +1,6 @@
 ---
 tags: [java, jvm, spring, interview-questions]
-related: [architecture, redis]
+related: [architecture, redis, cs]
 ---
 
 # Java — 면접 예상 질문
@@ -150,12 +150,15 @@ Spring AOP가 동작하지 않는 케이스를 이해하려면 먼저 Spring AOP
 
 **모범 답변 방향:**
 
-- **1차 캐시**: 엔티티 조회 시 영속성 컨텍스트에 저장, 같은 트랜잭션 내 재조회 시 DB 쿼리 없이 캐시 반환. 동일한 식별자 → 동일한 객체 참조(동일성 보장)
-- **변경 감지(Dirty Checking)**: 최초 조회 시 스냅샷 저장 → flush 시점에 현재 상태와 비교 → 변경된 필드 자동 UPDATE. 명시적 update 호출 불필요
-- **쓰기 지연(Write-Behind)**: persist/변경감지로 생성된 SQL을 쓰기 지연 저장소에 모아뒀다가 flush 시점에 일괄 전송. JDBC 배치 활용 가능. **⚠️ 지연 로딩(Lazy Loading)과 완전히 다른 개념** — 쓰기 지연은 "쓰기 쿼리를 모아서 보내는 것", 지연 로딩은 "연관 엔티티를 접근 시점에 조회하는 것"
-- **flush 발생 시점 3가지**: ① 트랜잭션 커밋 직전 ② JPQL 쿼리 실행 직전 ③ 명시적 flush() 호출
-- **flush vs commit**: flush = SQL 전송(롤백 가능), commit = 트랜잭션 확정(롤백 불가). commit 내부에서 flush 먼저 실행 후 확정
-- **OSIV**: Spring Boot 기본 활성화. ON → Controller까지 영속성 컨텍스트 유지(Lazy Loading 가능). OFF → Service 트랜잭션 종료와 함께 영속성 컨텍스트 닫힘 → Controller에서 Lazy 접근 시 LazyInitializationException. 해결: Service에서 fetch join/EntityGraph로 미리 로딩. 실무에서는 OSIV OFF 권장(DB 커넥션 풀 고갈 방지)
+영속성 컨텍스트는 엔티티를 관리하는 작업 공간이고, 그 안의 1차 캐시는 같은 식별자의 엔티티를 반복해서 조회할 때 중요한 역할을 합니다. 이미 관리 중인 엔티티라면 다시 데이터베이스를 조회하기보다 1차 캐시의 객체를 반환하므로, 같은 영속성 컨텍스트 안에서는 같은 식별자가 같은 객체 참조로 이어집니다. 다만 이 캐시는 애플리케이션 전체가 공유하는 2차 캐시가 아니라 `EntityManager`의 생명주기에 묶인다는 점을 함께 설명해야 합니다. 변경 감지는 조회 시점의 스냅샷과 현재 엔티티 상태를 flush 시점에 비교해 차이가 있으면 UPDATE SQL을 만드는 기능입니다. 그래서 관리 상태의 엔티티는 별도의 update 메서드를 호출하지 않아도 변경이 반영될 수 있지만, 영속성 컨텍스트에서 분리된 객체에는 같은 방식이 그대로 적용되지 않습니다.
+
+쓰기 지연은 `persist`나 변경 감지로 생긴 SQL을 즉시 확정하지 않고 영속성 컨텍스트에 모아 두었다가 flush할 때 데이터베이스와 동기화하는 동작입니다. 설정과 SQL 형태가 맞으면 JDBC 배치로 묶을 여지도 있지만, 쓰기 지연 자체가 언제나 한 번의 배치 전송을 보장하는 것은 아닙니다. 또 쓰기 지연은 쓰기 SQL의 실행 시점을 다루고, 지연 로딩은 연관 엔티티의 조회 시점을 다루므로 서로 다른 개념입니다. 기본 `AUTO` flush 모드에서는 트랜잭션 커밋 전에 flush가 일어나고, 대기 중인 변경과 관련된 JPQL이나 HQL을 실행하기 전에도 정합성을 위해 필요하면 flush될 수 있습니다. 애플리케이션이 `flush()`를 직접 호출할 수도 있습니다. flush는 변경 내용을 SQL로 데이터베이스에 동기화하는 과정이지 트랜잭션을 확정하는 commit은 아닙니다. 따라서 flush 뒤에도 트랜잭션이 끝나지 않았다면 rollback할 수 있고, 반대로 제약 조건 위반처럼 SQL 실행 과정의 오류는 flush 시점에 드러날 수 있습니다.
+
+OSIV는 웹 요청이 끝날 때까지 `EntityManager`를 열어 두어 컨트롤러나 뷰에서도 지연 로딩을 가능하게 하는 패턴이며, Spring Boot 웹 애플리케이션에서는 기본으로 등록됩니다. 이를 끄면 서비스 트랜잭션이 끝난 뒤 초기화되지 않은 지연 연관을 접근할 때 `LazyInitializationException`이 발생할 수 있습니다. 해결할 때는 OSIV를 무조건 다시 켜기보다 서비스 경계 안에서 필요한 데이터를 fetch join이나 `EntityGraph`로 조회하거나 DTO로 변환해 반환하는 방법을 먼저 검토할 수 있습니다. OSIV를 켜면 표현 계층에서 연관 데이터를 편하게 탐색할 수 있지만, 예상하지 못한 추가 쿼리와 긴 영속성 컨텍스트 범위를 만들 수 있습니다. 반대로 끄면 조회 범위가 명확해지는 대신 필요한 데이터를 트랜잭션 안에서 의식적으로 준비해야 합니다. 따라서 면접에서는 기능만 나열하기보다 조회 경계, 쿼리 수, 트랜잭션 확정 시점을 함께 보고 선택한다고 답하는 것이 좋습니다.
+
+**출처:**
+- [Hibernate ORM User Guide — Flushing](https://docs.jboss.org/hibernate/orm/current/userguide/html_single/Hibernate_User_Guide.html#flushing)
+- [Spring Boot Reference — Open EntityManager in View](https://docs.spring.io/spring-boot/reference/data/sql.html#data.sql.jpa-and-spring-data.open-entity-manager-in-view)
 
 ---
 
@@ -709,27 +712,21 @@ http
 
 **모범 답변 방향:**
 
-@Scheduled는 JVM 레벨 스케줄러이므로 N개 인스턴스 → N번 독립 실행.
-
-**구현 전략 (우선순위 순):**
-
-1. **ShedLock** — 가장 많이 쓰는 방식. 별도 인프라 불필요, 기존 DB 테이블 하나로 분산락 구현.
+`@Scheduled`는 각 애플리케이션 컨텍스트에 등록된 스케줄러가 자기 일정을 실행하는 방식입니다. 따라서 같은 애플리케이션을 여러 인스턴스로 배포하면 각 인스턴스가 같은 시각에 작업을 시작할 수 있고, 한 번만 실행되어야 하는 정산이나 만료 처리라면 중복 갱신과 중복 발송이 생길 수 있습니다. 해결의 핵심은 모든 인스턴스가 공유하는 저장소에서 같은 작업 이름의 실행 권한을 경쟁하게 하고, 권한을 얻은 한 인스턴스만 실제 작업을 수행하도록 만드는 것입니다. 어떤 구현을 고를지는 이미 운영 중인 인프라, 작업 시간의 변동 폭, 장애 뒤 복구 방식에 따라 정합니다. JDBC 같은 공유 저장소가 이미 있다면 ShedLock으로 잠금 정보를 저장하는 구성이 단순합니다. ShedLock은 다른 노드가 같은 잠금을 보유 중이면 그 실행을 기다리게 하기보다 건너뛰는 도구이므로, 누락된 회차를 반드시 다시 처리해야 하는 업무라면 별도의 재처리 설계도 필요합니다. 아래 어노테이션 예시에서 `lockAtMostFor`는 작업 노드가 비정상 종료되어 명시적으로 잠금을 풀지 못했을 때 잠금이 영구히 남지 않게 하는 상한이고, `lockAtLeastFor`는 작업이 너무 빨리 끝나더라도 일정 시간 잠금을 유지해 짧은 간격의 중복 실행을 막는 하한입니다.
    ```java
    @SchedulerLock(name = "myTask", lockAtMostFor = "10m", lockAtLeastFor = "1m")
    ```
-   - `lockAtMostFor`: 크래시 시 최대 락 유지 시간 (TTL 역할) → 자동 해제 보장
-   - `shedlock` 테이블의 `lock_until` 컬럼으로 만료 관리
-
-2. **Redis 분산락 (Redisson)** — Redis 인프라가 이미 있을 때.
+JDBC 대신 Redis를 이미 안정적으로 운영하고 있다면 Redisson의 `RLock`도 후보가 됩니다. 다음 예시는 대기 시간을 0으로 두어 잠금을 즉시 얻지 못하면 이번 실행을 포기하고, 획득했다면 10분의 명시적 lease time을 두는 형태입니다. 이 경우 lease time보다 작업이 길어지면 첫 실행이 끝나기 전에 다른 인스턴스가 잠금을 얻을 수 있으므로, 최악의 작업 시간을 기준으로 값을 정하고 실행 시간도 관측해야 합니다. Redisson의 watchdog은 lease time을 지정하지 않은 잠금에서 소유 인스턴스가 살아 있는 동안 만료 시간을 연장하는 장치이므로, 아래처럼 명시적 lease time을 전달한 예시와 혼동하면 안 됩니다. 잠금 해제는 실제로 잠금을 얻은 경우에만 `finally`에서 수행해야 합니다.
    ```java
    RLock lock = redissonClient.getLock("myTask");
    lock.tryLock(0, 10, TimeUnit.MINUTES);
    ```
-   - `SET lock_key value NX PX {TTL}` 원자적 점유 + TTL 자동 만료
-   - Redisson watchdog: 작업 진행 중 TTL 자동 연장
+ZooKeeper를 이미 사용하는 환경이라면 ephemeral node를 실행 권한으로 삼을 수도 있습니다. 세션이 끝나면 노드가 제거되는 특성을 이용할 수 있지만, 세션 만료 판단과 네트워크 단절 중의 상태를 이해해야 하고 단순한 정기 작업 하나 때문에 새 운영 인프라를 도입하기에는 부담이 큽니다. 어느 저장소를 쓰든 잠금은 중복 실행 가능성을 줄이는 조정 장치일 뿐, 외부 부작용을 자동으로 되돌려 주지는 않습니다. 잠금 만료 직전에 오래 멈췄던 작업이 다시 진행되는 상황까지 고려해 작업 자체를 멱등하게 만들고, 처리한 업무 키를 기록하거나 데이터베이스의 유일 제약과 조건부 갱신으로 마지막 방어선을 두는 것이 안전합니다. 결국 선택 기준은 특정 도구의 순위가 아니라 공유 저장소의 신뢰성, 잠금 만료와 작업 시간의 관계, 재시도 정책, 중복 실행이 발생했을 때 업무 데이터가 견딜 수 있는지입니다.
 
-3. **ZooKeeper ephemeral node** — ZooKeeper 인프라가 있을 때.
-   - ephemeral node 생성 → 세션 끊기면 자동 삭제 → Watch 이벤트로 다른 인스턴스 감지
+**출처:**
+- [Spring Framework Reference — Task Execution and Scheduling](https://docs.spring.io/spring-framework/reference/integration/scheduling.html)
+- [ShedLock 공식 문서](https://github.com/lukas-krecan/ShedLock)
+- [Redisson Reference Guide — Locks and synchronizers](https://redisson.pro/docs/data-and-services/locks-and-synchronizers/)
 
 **꼬리 질문 예시:**
 - 락을 획득한 서버가 crash되면 락이 어떻게 해제되나요? (ShedLock: lockAtMostFor 만료 / Redis: TTL 만료 자동 해제 / ZooKeeper: ephemeral node 세션 만료 자동 삭제)
@@ -939,6 +936,28 @@ Spring Batch에서 Job은 배치 처리 전체 단위이고, Step은 Job을 논�
 
 ## Java 동시성 제어
 
+### Q. 서버가 한 대인데도 동시에 들어온 주문 요청 때문에 재고 문제가 생길 수 있나요?
+
+**난이도:** 기초 — 첫 학습 확인
+
+**핵심 키워드:** 공유 데이터, 처리 단계의 교차, 경쟁 상태, 확인과 변경, 보호 범위
+
+**모범 답변:**
+
+서버가 한 대라는 사실만으로 요청이 하나씩 끝까지 처리된다고 볼 수는 없습니다. 하나의 서버에서도 여러 스레드가 요청을 처리할 수 있고, CPU 코어가 하나여도 운영체제가 작업을 번갈아 실행하면서 처리 단계가 섞일 수 있습니다. 재고가 하나 남은 상품을 주문하는 상황을 예로 들면, 요청 A가 재고를 읽고 구매 가능하다고 판단한 뒤 아직 차감하지 않은 시점에 요청 B가 같은 재고를 읽을 수 있습니다. 이후 두 요청이 각자 주문을 확정하도록 구현되어 있고 별도의 보호가 없다면, 재고는 하나인데 주문을 두 건 받아 버릴 수 있습니다. 두 요청의 시작 시간이 조금 다르더라도 A의 확인과 변경 사이에 B가 들어오면 같은 문제가 발생할 수 있습니다. 이런 경쟁 상태를 이해할 때 중요한 것은 단순히 사용자가 많다는 사실이 아니라, 여러 요청이 같은 데이터를 읽고 수정하며 그 순서에 따라 결과가 달라진다는 점입니다. 먼저 재고보다 많은 주문을 확정하면 안 된다는 업무 규칙을 정하고, 그 규칙을 깨뜨리는 실행 순서를 찾아야 합니다. 해결 방법으로는 같은 재고를 다루는 구간을 잠금으로 보호하거나, 실제 저장할 때 재고가 충분한지 조건을 검사하는 방식 등을 생각할 수 있습니다. 같은 프로그램 안의 공유 객체를 보호할 때 사용하는 잠금과 여러 프로그램이 공유하는 데이터베이스를 보호하는 방법은 적용 범위가 다르므로, 한 가지 도구가 모든 상황을 해결한다고 생각해서는 안 됩니다. 또한 서로 다른 상품을 처리하는 요청까지 모두 줄 세우면 불필요한 대기가 늘어날 수 있습니다. 따라서 안전하게 처리할 대상과 범위를 먼저 정한 뒤, 해당 범위에서 확인과 변경이 어긋나지 않도록 설계해야 합니다. 이 예시는 원리 설명을 위한 것이며, 실제 구현에 조건부 갱신이나 제약 조건이 있다면 중복 주문이 거절될 수 있습니다.
+
+**꼬리 질문 예시:**
+- 두 요청이 정확히 같은 순간에 시작하지 않아도 문제가 생길 수 있나요?
+- 재고를 읽는 단계만 보호하면 충분할까요?
+
+- 개념 설명: [[topics/java/concepts#동시성 기초 — 확인과 변경 사이의 경쟁 상태]]
+
+**출처:**
+- [Oracle: Thread Interference](https://docs.oracle.com/javase/tutorial/essential/concurrency/interfere.html)
+- [Oracle: Processes and Threads](https://docs.oracle.com/javase/tutorial/essential/concurrency/procthread.html)
+- [Oracle: Synchronized Methods](https://docs.oracle.com/javase/tutorial/essential/concurrency/syncmeth.html)
+
+
 ### Q. Java에서 멀티스레드 환경의 동시성 문제를 해결하는 방법들을 설명하고, ReentrantLock을 synchronized 대신 선택하는 기준을 설명해주세요.
 
 **난이도:** 기초
@@ -947,13 +966,18 @@ Spring Batch에서 Job은 배치 처리 전체 단위이고, Step은 Job을 논�
 
 **모범 답변 방향:**
 
-1. **synchronized**: 모니터 락 자동 획득/해제. 예외 시에도 자동 해제. 단, 타임아웃/인터럽트 처리 불가, 락 실패 시 무한 대기.
-2. **volatile**: 메인 메모리 직접 읽기/쓰기 강제 + 명령어 재배치 방지 → 가시성 해결. 복합 연산(i++) 원자성은 미보장 → AtomicInteger 필요.
-3. **ReentrantLock 선택 기준**: 무한 대기를 피해야 할 때 → `tryLock(timeout, TimeUnit)`으로 획득 실패 시 포기 후 별도 처리. 대기 중 인터럽트 허용이 필요할 때 → `lockInterruptibly()`.
-   - 실무 예: 티켓 좌석 선점에서 락 대기 없이 즉시 실패시키고 409(이미 선점됨)를 반환 — TicketRush의 Redisson 락 대기 0초 설계와 같은 발상.
-4. **ConcurrentHashMap vs synchronizedMap**:
-   - ConcurrentHashMap: 버킷 단위 CAS + 읽기 무락 → 동시 읽기 처리량 높음.
-   - synchronizedMap: 전체 맵 락 → 읽기도 직렬화. 읽기 많은 캐시성 자료구조에 부적합.
+멀티스레드 환경의 동시성 문제는 먼저 무엇을 보장해야 하는지 나눠서 봐야 합니다. 여러 연산을 하나의 임계 구역으로 묶어야 한다면 `synchronized`나 `Lock` 계열이 필요하고, 한 변수의 최신 값이 다른 스레드에 보이게 하는 것이 목적이라면 `volatile`을 검토할 수 있습니다. `synchronized`는 객체의 모니터를 획득한 스레드만 블록을 실행하게 하며, 블록을 벗어날 때 JVM이 잠금을 해제하므로 예외가 발생해도 별도의 `unlock()`을 작성할 필요가 없습니다. 코드가 짧고 단순한 상호 배제라면 이 구조가 읽기 쉽고 실수도 적습니다. 다만 모니터 획득을 일정 시간만 기다렸다가 포기하거나, 잠금을 기다리는 스레드가 인터럽트에 반응해야 하는 정책을 직접 표현하기는 어렵습니다.
+
+`volatile`은 쓰기와 이후 읽기 사이의 가시성과 순서 보장을 제공하지만, 여러 단계로 이루어진 복합 연산 전체를 원자적으로 만들지는 않습니다. 예를 들어 `count++`는 읽기, 증가, 쓰기로 나뉘므로 두 스레드가 같은 값을 읽으면 증가분을 잃을 수 있습니다. 단순 카운터처럼 원자적 갱신이 필요하면 `AtomicInteger` 같은 원자 클래스를 쓸 수 있고, 여러 필드와 업무 규칙을 함께 보호해야 하면 잠금으로 임계 구역을 묶어야 합니다. 즉 `volatile`은 잠금의 가벼운 대체품이라기보다 상태 플래그처럼 한 번의 읽기와 쓰기가 중심인 경우에 맞는 도구입니다.
+
+`ReentrantLock`은 잠금 획득과 해제를 코드에서 명시적으로 관리하는 대신 정책을 더 세밀하게 표현할 수 있습니다. `tryLock(timeout, unit)`을 사용하면 정해진 시간 안에 잠금을 얻지 못했을 때 실패 응답이나 재시도 경로로 전환할 수 있고, `lockInterruptibly()`를 사용하면 대기 중인 작업을 취소 신호에 반응하게 만들 수 있습니다. 좌석 선점처럼 오래 기다리는 것보다 즉시 충돌을 알려 주는 편이 나은 흐름에서는 대기 시간을 0으로 둔 시도가 하나의 선택지가 됩니다. 다만 `ReentrantLock`은 반드시 잠금 획득 성공 여부를 확인하고 `finally`에서 해제해야 하므로, 이런 기능이 필요하지 않다면 `synchronized`가 더 안전하고 간결할 수 있습니다.
+
+공유 맵도 접근 방식에 따라 선택이 달라집니다. `Collections.synchronizedMap()`은 단일 뮤텍스로 맵 연산을 보호하므로 간단하지만, 동시 접근이 많을수록 서로 기다리는 구간이 커지고 컬렉션 뷰를 순회할 때는 문서가 요구하는 외부 동기화도 지켜야 합니다. `ConcurrentHashMap`은 조회가 일반적으로 잠금을 요구하지 않고 갱신도 높은 동시성을 목표로 설계되어, 읽기와 쓰기가 자주 겹치는 공유 캐시나 집계에 더 적합합니다. 대신 여러 키를 읽고 바꾸는 업무 연산 전체가 자동으로 하나의 트랜잭션이 되는 것은 아니므로 `compute`, `merge`, `putIfAbsent` 같은 원자 연산으로 충분한지 따져봐야 합니다. 면접에서는 도구 이름을 나열하기보다 보호할 상태의 범위, 대기 취소와 타임아웃의 필요성, 실패 처리 방식, 자료구조가 제공하는 원자 연산을 기준으로 선택한다고 설명하면 됩니다.
+
+**출처:**
+- [Oracle Java API — ReentrantLock](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/locks/ReentrantLock.html)
+- [Oracle Java API — ConcurrentHashMap](https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/concurrent/ConcurrentHashMap.html)
+- [Java Language Specification — Memory Model](https://docs.oracle.com/javase/specs/jls/se25/html/jls-17.html)
 
 **꼬리 질문 예시:**
 - ReentrantLock을 synchronized 대신 선택하는 구체적인 상황은 무엇인가요?

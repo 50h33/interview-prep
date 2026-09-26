@@ -1,6 +1,6 @@
 ---
 tags: [elasticsearch, search, inverted-index, full-text-search, ilm, backend]
-related: [mysql, kafka]
+related: [mysql, kafka, ai]
 ---
 
 # ElasticSearch — 핵심 개념

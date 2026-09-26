@@ -1,6 +1,6 @@
 ---
 tags: [kubernetes, k8s, deployment, hpa, devops]
-related: [architecture, java, cs]
+related: [architecture, java, cs, aws]
 ---
 
 # Kubernetes 핵심 개념

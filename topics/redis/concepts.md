@@ -1,6 +1,6 @@
 ---
 tags: [redis, cache, distributed-lock, backend]
-related: [architecture, java, kubernetes, mysql, kafka]
+related: [architecture, java, kubernetes, mysql, kafka, cs]
 ---
 
 # Redis 핵심 개념
@@ -200,6 +200,32 @@ related: [architecture, java, kubernetes, mysql, kafka]
 
 **사용 시나리오**: 재고 차감, 중복 결제 방지, 스케줄러 중복 실행 방지, 선착순 처리.
 
+### 기초 — 여러 프로그램이 같은 잠금을 공유해야 하는 이유
+
+선행 학습: [[topics/java/concepts#잠금으로 확인과 변경을 함께 보호하기]].
+
+한 JVM의 `synchronized`는 같은 잠금 객체를 사용하는 스레드끼리 조정한다. 서로 다른 JVM에서 만든 잠금 객체는 이름이 같아도 별개다. 같은 재고를 처리하는 프로그램 두 개가 각각 자기 잠금만 얻으면, 둘 다 보호 구간에 들어갈 수 있다. 한 컴퓨터에서 프로그램을 두 개 실행하는 경우도 마찬가지다.
+
+Redis 분산 락은 여러 프로그램이 Redis의 **같은 자원에 대응하는 같은 락 키**를 사용해 작업을 조정하는 방식이다. 정상 동작하고 락이 유효한 동안 A가 락을 보유하면 B의 획득은 실패하며, B는 설정한 정책에 따라 기다리거나 요청을 실패 처리한다. A가 변경을 끝내고 락을 해제한 후 B가 락을 얻으면, B는 현재 상태를 다시 확인해야 한다.
+
+중요한 것은 서버 대수보다 **같은 데이터를 수정하는 모든 경로가 같은 잠금 규칙에 참여하는가**이다. 다른 프로그램이 DB를 직접 수정하면 Redis 락이 그 작업까지 자동으로 막아 주지는 않는다. 락 만료·장애 상황도 별도 검토해야 하므로 DB의 충돌 검증은 후속 학습에서 다룬다.
+
+- 이해 확인: 같은 재고를 수정하는 두 프로그램이 각자 자기 프로그램 안에서만 잠그면, 서로의 요청까지 막을 수 있을까?
+- **분산 락과 중복 요청 판별은 다르다.** 락을 얻은 작업이 끝난 뒤 같은 요청이 다시 락을 얻을 수도 있다. 분산 락은 같은 자원에 대한 동시 접근을 조정하며, 같은 요청의 결과를 중복 반영하지 않으려면 별도의 요청 식별·처리 이력 등 멱등성 설계를 검토한다. 잠금만으로 ‘한 번만 처리’를 보장하지 않는다.
+- **DB 낙관적 락과 병행하는 이유:** Redis 락으로 같은 자원의 처리 경합을 줄이고, 락 만료 등으로 작업이 겹친 경우에는 DB 버전 검사로 오래된 상태에 근거한 갱신을 거절할 수 있다. 두 장치의 보호 범위와 실패 조건은 다르다. 버전 검사 예시와 조건은 [[topics/java/concepts#JPA 낙관적 락 기초 — 읽은 버전으로 변경 충돌 확인하기]] 참고.
+- **거절 자체를 없애는 것은 아니다.** 락 획득 실패 시 바로 반환하는 정책은 일부 요청을 DB의 대상 데이터 갱신까지 보내기 전에 거절해, 충돌할 갱신 작업의 비용을 줄일 수 있다. 실패한 요청이 전혀 DB 작업을 하지 않는다거나 전체 실패 수가 반드시 감소한다고 단정하지 않는다. 실패 기록·보상 등 별도 처리는 남을 수 있다.
+- 출처: [Oracle의 객체 잠금](https://docs.oracle.com/javase/tutorial/essential/concurrency/locksync.html), [Redis 공식 분산 락 문서](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/)
+
+### 동시 클릭과 락 획득 순서
+
+서로 다른 소유자가 아직 잠기지 않은 같은 자원의 락을 요청하는 정상 동작 상황에서는, Redis가 먼저 성공시킨 획득 연산이 락을 차지한다. 사용자 클릭 시각, 앱 서버 도착 시각, Redis의 처리 순서는 네트워크와 서버 처리 과정 때문에 다를 수 있다.
+
+‘잠금이 비었는지 확인하고 내 소유로 기록하는 과정’을 원자적으로 수행하면, 먼저 실행된 연산이 소유자를 기록한 뒤 다른 획득 연산은 이미 잠겼음을 확인한다. 두 요청이 각각 빈 상태를 확인하고 따로 기록하는 구조와 다르다. 이것은 정상 획득 경합의 설명이며 만료·장애 시 보호 범위는 별도로 다룬다.
+
+Redisson의 일반 `getLock`은 대기 요청의 FIFO 순서를 보장하는 Fair Lock이 아니다. `getFairLock` 역시 서버 측 락 요청 순서를 다루므로 사람의 실제 클릭 시각 순서를 증명하는 장치로 해석해서는 안 된다. 락 획득은 이후 DB 선점·결제 성공까지 확정한다는 뜻도 아니다.
+
+- 출처: [Redisson Lock과 Fair Lock](https://redisson.pro/docs/data-and-services/locks-and-synchronizers/), [Redis의 원자적 스크립트 실행](https://redis.io/docs/latest/develop/programmability/eval-intro/)
+
 ### SETNX 방식
 
 ```
@@ -234,15 +260,16 @@ Redis 노드 **N개(홀수, 보통 5개)** 에 동시 획득 시도 → **과반
 노드5 SET lock NX PX 5000 → 실패
 ```
 
-- 단일 노드 장애에도 안전
+- 독립 노드 과반수 획득과 유효 시간 등 알고리즘의 가정 아래 상호 배제를 목표로 한다. 단일 노드 장애 여부만으로 안전성을 판단하지 않는다.
 - 실제 유효 시간 = TTL - 획득에 걸린 시간
 - Java에서는 Redisson `RedissonRedLock`으로 구현 가능하지만 현재 deprecated — Redisson은 단일 `RLock`(워치독으로 임대 시간 자동 연장) 사용을 권장
 
 **선택 기준**:
-- Redis Cluster로 고가용성 이미 보장 → SETNX로 충분
-- 강한 일관성이 필요한 크리티컬 자원 → Redlock
+- Redis Cluster의 고가용성과 락의 상호 배제 보장은 다르다. 비동기 복제 후 페일오버에서 락 정보가 유실될 수 있으므로 Cluster라는 이유만으로 충분하다고 판단하지 않는다.
+- 중요한 데이터는 필요한 보장과 장애 가정을 먼저 정의한다. Redlock도 유효 시간·시계 오차 등의 가정이 있으므로 도입만으로 강한 일관성을 보장한다고 단정하지 않는다.
 
 > 출처: Redis 공식 문서 - https://redis.io/docs/manual/patterns/distributed-locks/
+> 안전성 설명 재확인: [현재 공식 문서](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/) (2026-09-26).
 
 ---
 

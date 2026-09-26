@@ -1,6 +1,6 @@
 ---
 tags: [kubernetes, k8s, 면접질문, deployment, hpa]
-related: [kubernetes/concepts]
+related: [kubernetes/concepts, aws]
 ---
 
 # Kubernetes 면접 질문

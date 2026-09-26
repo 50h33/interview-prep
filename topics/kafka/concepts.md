@@ -1,6 +1,6 @@
 ---
 tags: [kafka, messaging, event-streaming, backend]
-related: [architecture, redis, elasticsearch]
+related: [architecture, redis, elasticsearch, ai]
 ---
 
 # Kafka — 핵심 개념 정리

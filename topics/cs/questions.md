@@ -1,6 +1,6 @@
 ---
 tags: [cs, operating-system, data-structure, database, network, 면접질문]
-related: [cs/concepts, java, mysql]
+related: [cs/concepts, java, mysql, aws]
 ---
 
 # CS 기초 — 면접 질문

@@ -1,6 +1,6 @@
 ---
 tags: [cs, operating-system, data-structure, database, network, networking, http, tls, nginx]
-related: [java, mysql, redis, architecture]
+related: [java, mysql, redis, architecture, aws]
 ---
 
 # CS 기초 — 운영체제 · 자료구조 · DB · 네트워크

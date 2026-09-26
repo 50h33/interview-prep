@@ -32,6 +32,7 @@ tags: [home, index]
 
 ### Backend — Java / Spring
 - [[topics/java/concepts]] / [[topics/java/questions]]
+- 기초 학습: [[topics/java/concepts#동시성 기초 — 확인과 변경 사이의 경쟁 상태]] → [[topics/java/questions#Java 동시성 제어]]
 
 ### Database
 - [[topics/mysql/concepts]] / [[topics/mysql/questions]]

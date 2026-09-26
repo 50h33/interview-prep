@@ -1,6 +1,6 @@
 ---
 tags: [mysql, database, index, interview-questions]
-related: [redis, elasticsearch]
+related: [redis, elasticsearch, cs]
 ---
 
 # MySQL — 면접 예상 질문
