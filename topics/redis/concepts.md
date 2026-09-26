@@ -226,6 +226,25 @@ Redisson의 일반 `getLock`은 대기 요청의 FIFO 순서를 보장하는 Fai
 
 - 출처: [Redisson Lock과 Fair Lock](https://redisson.pro/docs/data-and-services/locks-and-synchronizers/), [Redis의 원자적 스크립트 실행](https://redis.io/docs/latest/develop/programmability/eval-intro/)
 
+### 락 임대 시간과 업무상 선점 유효 시간
+
+Redis 락의 임대 시간과 [[topics/mysql/concepts]]의 DB에 저장한 선점 유효 시간은 서로 다른 상태를 다룬다.
+
+| 구분 | 의미 | 시간이 끝났을 때 |
+|---|---|---|
+| Redis 락 임대 시간 | 같은 락 규칙에 참여하는 다른 소유자의 접근을 제한하는 기간 | 락이 만료되어 다른 요청이 획득할 수 있음 |
+| DB 선점 유효 시간 | 특정 사용자의 임시 선점을 업무 규칙상 인정하는 기간 | 애플리케이션이 만료를 판정하고 상태 변경 또는 요청 거절 등을 처리해야 함 |
+
+Redisson `RLock`에서 명시한 `leaseTime`은 락의 자동 해제 시간이다. 이 만료가 별도 DB의 행을 자동으로 수정하지는 않는다. DB의 `holdExpiredAt` 같은 일반 시각 필드도 시간이 되었다는 이유만으로 `HOLD`를 `AVAILABLE`로 바꾸지 않는다. 이를 반영하는 별도의 애플리케이션 로직이 필요하다.
+
+예를 들어 락이 사라졌어도 DB에는 아직 유효한 다른 사용자의 선점이 남아 있을 수 있다. 따라서 **락 획득 성공과 업무상 선점 가능 여부를 따로 검사**해야 한다. DB 갱신 충돌 검사는 [[topics/java/concepts#JPA 낙관적 락 기초 — 읽은 버전으로 변경 충돌 확인하기]]와 연결된다.
+
+두 곳에 같은 길이의 시간을 지정해도 시작 시점과 해제·상태 변경 절차가 다르므로 같은 순간에 함께 바뀐다고 보장할 수 없다. 구체적인 만료 처리 방식은 해당 애플리케이션 코드를 확인해야 한다.
+
+**상태 확인과 버전 검사의 구분:** 다른 사용자의 유효한 `HOLD`와 최신 버전 8을 읽었고 이후 변경도 없다면, 버전 8 조건의 갱신에는 버전 충돌이 없다. 상태 검사를 빠뜨린 잘못된 소유자 변경을 `@Version`만으로 거절할 수는 없다. Redis 락을 획득한 요청이라도 기존 선점의 유효성을 확인해 허용되지 않은 변경을 거절해야 한다. 이는 상태 검사를 생략한 가상 상황이며 특정 구현의 결함을 의미하지 않는다.
+
+- 출처: [Redisson Lock의 leaseTime](https://redisson.pro/docs/data-and-services/locks-and-synchronizers/), [Redis 분산 락의 유효 시간](https://redis.io/docs/latest/develop/clients/patterns/distributed-locks/). DB 선점 예시는 두 저장소의 상태를 구분하기 위한 일반화한 설계 설명이다.
+
 ### SETNX 방식
 
 ```

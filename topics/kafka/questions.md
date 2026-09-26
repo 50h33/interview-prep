@@ -394,6 +394,12 @@ Kafka에 직접 발행하면 DB 트랜잭션은 롤백되어도 Kafka 메시지�
 
 **주의**: Outbox 패턴도 at-least-once 보장. 중복 발행 가능성 있어 Consumer 측 멱등성 처리 필요.
 
+**기초 이해 확인:** 같은 DB 트랜잭션에서 주문을 기록하던 중 Outbox 이벤트 기록이 실패했다면, 주문만 확정해도 될까요, 아니면 둘 다 취소해야 할까요?
+
+- 확인할 핵심: 주문 기록과 발행할 이벤트 기록을 하나의 원자적 커밋으로 묶는다. 이 질문은 트랜잭션 내부에서 아직 커밋되지 않은 변경을 가정한다.
+- 개념 상세: [[topics/kafka/concepts#기초 — DB 저장과 이벤트 전달은 별개다]]
+- 출처: [AWS Transactional outbox pattern](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html).
+
 ---
 
 ## Consumer lag 진단 및 확장 전략
@@ -416,4 +422,3 @@ Kafka에 직접 발행하면 DB 트랜잭션은 롤백되어도 Kafka 메시지�
 - Consumer 수 < 파티션 수 → Consumer 추가로 처리량 증가
 - Consumer 수 = 파티션 수 → 최대 병렬도
 - Consumer 수 > 파티션 수 → 초과 Consumer는 idle 상태, 처리량 기여 없음
-

@@ -571,3 +571,14 @@ Sentinel은 단일 master + 복수 replica로 HA를 제공합니다. failover는
 - 폴링 대신 SSE로 순번을 푸시하지 않은 이유는?
 - Redis가 장애 나면 대기열은 어떻게 되나요? (TicketRush에서는 Redis 단일 장애점을 한계로 수용)
 - 입장 토큰을 JWT로 만들지 않은 이유는? (서명 CPU 비용)
+
+---
+
+## 기초 이해 확인 — 락 만료와 선점 상태
+
+- 질문: Redis 락이 만료되었지만 DB에 다른 사용자의 유효한 선점이 남아 있다면, 새 요청이 락을 얻었다는 이유만으로 선점을 허용해도 될까요?
+- 확인할 핵심: 락 획득과 업무상 이용 가능 여부를 구분한다. 락 만료는 DB 상태를 자동으로 변경하지 않으므로 현재 선점 상태와 유효 시간을 확인해야 한다.
+- 개념 상세: [[topics/redis/concepts#락 임대 시간과 업무상 선점 유효 시간]]
+- 추가 이해 확인: 다른 사용자가 선점한 HOLD 상태와 최신 버전을 읽었고 이후 변경도 없다면, 상태 검사를 생략한 덮어쓰기를 @Version만으로 막을 수 있을까요?
+- 확인할 구분: 최신 버전을 사용했다는 사실과 업무상 허용된 변경인지는 다르다. [[topics/java/concepts#JPA 낙관적 락 기초 — 읽은 버전으로 변경 충돌 확인하기]]의 업무 조건 검사 설명을 참고한다.
+- 출처: [Redisson Lock의 leaseTime](https://redisson.pro/docs/data-and-services/locks-and-synchronizers/). DB 선점은 일반화한 설계 예시이다.

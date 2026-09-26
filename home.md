@@ -37,10 +37,12 @@ tags: [home, index]
 ### Database
 - [[topics/mysql/concepts]] / [[topics/mysql/questions]]
 - [[topics/redis/concepts]] / [[topics/redis/questions]]
+- 기초 학습: [[topics/redis/concepts#락 임대 시간과 업무상 선점 유효 시간]] → [[topics/redis/questions#기초 이해 확인 — 락 만료와 선점 상태]]
 - [[topics/elasticsearch/concepts]] / [[topics/elasticsearch/questions]]
 
 ### Messaging & Coordination
 - [[topics/kafka/concepts]] / [[topics/kafka/questions]]
+- 기초 학습: [[topics/kafka/concepts#기초 — DB 저장과 이벤트 전달은 별개다]]
 - [[topics/aws/concepts]] / [[topics/aws/questions]] — EC2, ECR, Route 53, IAM/OIDC 배포
 
 ### Infrastructure

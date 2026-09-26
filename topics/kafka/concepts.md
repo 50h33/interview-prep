@@ -36,6 +36,19 @@ related: [architecture, redis, elasticsearch, ai]
 - DB → Kafka: polling 방식 또는 Debezium 등 CDC 방식
 - 효과: 비즈니스 로직 실패 시 메시지 발행 자체를 막음
 
+#### 기초 — DB 저장과 이벤트 전달은 별개다
+
+이벤트는 ‘주문이 접수됐다’처럼 발생한 사실을 다른 프로그램에 알리는 데이터다. 가상 쇼핑몰에서 주문 서비스가 DB에 주문을 확정 저장한 뒤 Kafka로 이벤트를 보내면, 배송 서비스는 그 이벤트를 받아 후속 작업을 시작할 수 있다.
+
+**DB 커밋 성공 직후, Kafka 발행 전에 프로그램이 종료될 수 있다.** 주문 기록은 남지만 이벤트를 받지 못한 배송 서비스는 이 경로로 후속 작업을 시작하지 못한다. 이미 커밋한 DB 기록은 애플리케이션 종료만으로 자동 롤백되지 않는다. 두 시스템에 차례로 쓰는 것만으로 두 작업이 함께 성공하지는 않는다.
+
+Outbox는 같은 DB에 ‘보내야 할 이벤트’를 저장하는 테이블을 둔다. 주문 기록과 Outbox 이벤트 기록을 **하나의 DB 트랜잭션**으로 묶어, 둘 다 커밋되거나 둘 다 롤백되도록 한다. 커밋 후 별도의 전달 담당 코드인 Relay가 Outbox를 읽어 Kafka로 보낸다.
+
+발행 전에 종료되어도 DB에 발행할 이벤트가 남아 전달을 재시도할 수 있다. DB와 Kafka가 같은 순간 함께 커밋되는 것은 아니며, 실제 전달에는 Relay의 복구와 재시도가 필요하다. 중복 전달 처리 문제는 다음 학습에서 다룬다.
+
+- 가상 예시이며 특정 프로젝트의 주문·배송 구현을 의미하지 않는다.
+- 출처: [AWS Transactional outbox pattern](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html).
+
 ### Inbox 패턴 (컨슈머 멱등성)
 - 수신 메시지를 인박스 테이블에 저장 + 이벤트키 unique 제약
 - 중복 메시지 수신 시 DB 레벨에서 차단
