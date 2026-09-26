@@ -4,8 +4,8 @@ type: harness-constraints
 
 # 아키텍처 제약 (Architectural Constraints)
 
-> CLAUDE.md의 산문 규칙을 기계 판독형으로 구조화한 파일.
-> Claude는 파일 생성/수정 전 이 파일을 체크리스트로 사용한다.
+> AGENTS.md의 공통 산문 규칙을 기계 판독형으로 구조화한 파일.
+> Claude Code와 Codex는 파일 생성/수정 전 이 파일을 체크리스트로 사용한다.
 
 ---
 
@@ -124,4 +124,4 @@ jobs/              → gitignore
 3. **Empty file**: 파일이 존재하지만 내용이 frontmatter뿐
 4. **Missing frontmatter**: topics 파일에 frontmatter 없음
 5. **Orphan node**: home.md에 링크되지 않은 topics 파일
-6. **Harness signal**: Claude가 세션 중 정보를 못 찾은 경우
+6. **Harness signal**: Claude Code 또는 Codex가 세션 중 정보를 못 찾은 경우

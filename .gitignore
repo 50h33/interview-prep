@@ -1,10 +1,15 @@
 # idea
 .idea
 
-# claude
+# local agent state (Claude Code / Codex)
 jobs
 .claude/settings.local.json
 .omc/
+.omx/
+
+# Python helper caches
+__pycache__/
+*.pyc
 
 # resume (이력서 원본 + profile.md)
 resume
