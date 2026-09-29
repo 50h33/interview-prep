@@ -44,7 +44,9 @@ related: [architecture, redis, elasticsearch, ai]
 
 Outbox는 같은 DB에 ‘보내야 할 이벤트’를 저장하는 테이블을 둔다. 주문 기록과 Outbox 이벤트 기록을 **하나의 DB 트랜잭션**으로 묶어, 둘 다 커밋되거나 둘 다 롤백되도록 한다. 커밋 후 별도의 전달 담당 코드인 Relay가 Outbox를 읽어 Kafka로 보낸다.
 
-발행 전에 종료되어도 DB에 발행할 이벤트가 남아 전달을 재시도할 수 있다. DB와 Kafka가 같은 순간 함께 커밋되는 것은 아니며, 실제 전달에는 Relay의 복구와 재시도가 필요하다. 중복 전달 처리 문제는 다음 학습에서 다룬다.
+발행 전에 종료되어도 DB에 발행할 이벤트가 남아 전달을 재시도할 수 있다. DB와 Kafka가 같은 순간 함께 커밋되는 것은 아니며, 실제 전달에는 Relay의 복구와 재시도가 필요하다.
+
+**전송 성공과 완료 기록 사이에 장애가 나면 중복 전달이 가능하다.** 가상 Relay가 ‘미전송 조회 → Kafka 전송 → 성공 확인 → DB 전송 완료 표시’ 순서로 동작한다고 하자. Kafka가 이벤트 E1을 받은 뒤 DB 표시 전에 Relay가 종료되면, Kafka에는 E1이 있지만 DB에는 E1이 미전송으로 남는다. 복구된 Relay가 이를 다시 보내면 같은 이벤트가 중복 전달될 수 있다. 완료 표시 대신 성공한 Outbox 행을 삭제하는 구현에서도, 전송 성공 후 삭제 전에 장애가 나면 같은 문제가 발생할 수 있다. 아래 AWS 문서의 전송·성공 후 삭제 구조와 중복 가능성을 장애 상황에 적용한 설명이다.
 
 - 가상 예시이며 특정 프로젝트의 주문·배송 구현을 의미하지 않는다.
 - 출처: [AWS Transactional outbox pattern](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html).
@@ -53,6 +55,18 @@ Outbox는 같은 DB에 ‘보내야 할 이벤트’를 저장하는 테이블�
 - 수신 메시지를 인박스 테이블에 저장 + 이벤트키 unique 제약
 - 중복 메시지 수신 시 DB 레벨에서 차단
 - 발행 시 이벤트 키 생성 → 추적 가능성 확보
+
+멱등 처리는 같은 이벤트를 여러 번 받아도 한 번 처리한 것과 같은 업무 결과를 유지하는 것이다. 가상 재고 서비스에서 이벤트 E1의 첫 처리로 재고가 10에서 9가 됐다면, 같은 E1을 다시 받았을 때 재고를 또 줄이지 않고 9로 유지해야 한다. 재전달 시에도 같은 이벤트 ID를 사용한다.
+
+같은 DB 안에서 처리하는 구현 예시에서는 `(소비자 식별자, 이벤트 ID)`에 unique 제약을 둔 처리 기록을 먼저 삽입하고, 재고 변경까지 **동일한 로컬 트랜잭션**에 포함한다. 이미 처리한 ID라서 삽입이 실패하면 그 중복 이벤트의 트랜잭션을 롤백하고 업무 변경을 반복하지 않는다. 단순히 ID를 조회한 뒤 별도로 변경하는 것만으로는 동시 중복 처리나 두 작업 사이의 장애를 막지 못한다. 이 설명은 같은 DB의 변경을 대상으로 하며 외부 API 호출까지 해당 트랜잭션으로 묶인다는 뜻은 아니다.
+
+- 출처: [Idempotent Consumer — Chris Richardson](https://microservices.io/patterns/communication-style/idempotent-consumer.html).
+
+#### Outbox와 소비자 처리의 트랜잭션 경계
+
+Outbox 기반 전달과 소비자의 DB 멱등 처리를 함께 사용할 때, 보내는 쪽의 업무 변경과 Outbox 기록은 트랜잭션 A에서 커밋한다. 이후 Relay가 브로커로 전달하고, 받는 쪽은 처리한 이벤트 ID 기록과 업무 변경을 별도의 트랜잭션 B에서 커밋한다. A와 B는 각 서비스 DB의 로컬 트랜잭션이며, Relay 전송까지 하나의 DB 트랜잭션으로 묶여 있는 것이 아니다. 브로커 전송 실패가 A에서 이미 커밋한 변경을 자동으로 롤백하지 않는다. 저장된 이벤트를 기반으로 전달을 재시도하고, 받는 쪽은 멱등 처리로 중복 반영을 막는다.
+
+- 출처: [AWS Transactional outbox pattern](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html), [Idempotent Consumer](https://microservices.io/patterns/communication-style/idempotent-consumer.html).
 
 ---
 

@@ -43,6 +43,7 @@ tags: [home, index]
 ### Messaging & Coordination
 - [[topics/kafka/concepts]] / [[topics/kafka/questions]]
 - 기초 학습: [[topics/kafka/concepts#기초 — DB 저장과 이벤트 전달은 별개다]]
+- 후속 학습: [[topics/kafka/concepts#Inbox 패턴 (컨슈머 멱등성)]] → [[topics/kafka/concepts#Outbox와 소비자 처리의 트랜잭션 경계]]
 - [[topics/aws/concepts]] / [[topics/aws/questions]] — EC2, ECR, Route 53, IAM/OIDC 배포
 
 ### Infrastructure

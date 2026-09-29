@@ -400,6 +400,27 @@ Kafka에 직접 발행하면 DB 트랜잭션은 롤백되어도 Kafka 메시지�
 - 개념 상세: [[topics/kafka/concepts#기초 — DB 저장과 이벤트 전달은 별개다]]
 - 출처: [AWS Transactional outbox pattern](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html).
 
+**전달 복구 이해 확인:** 업무 데이터와 Outbox 이벤트가 커밋된 뒤, 메시지 브로커로 보내기 전에 프로그램이 종료됐다면 재시작한 Relay는 무엇을 근거로 전달을 재시도할 수 있을까요?
+
+- 확인할 핵심: DB가 정상이고 커밋된 Outbox 기록이 보존되어 있다면, 복구된 Relay가 미전달 기록을 읽어 전송을 재시도할 수 있다. 실제 전달에는 Relay와 브로커의 복구 및 재시도 동작이 필요하다.
+- 근거: 위 AWS 문서의 커밋된 Outbox 조회·전송 구조를 해당 장애 상황에 적용한 설명이다. 특정 프로젝트의 재시도 주기나 상태 컬럼을 전제하지 않는다.
+
+**중복 전달 이해 확인:** Relay가 브로커의 이벤트 수신 성공을 확인한 뒤, DB에 전송 완료를 기록하기 전에 종료됐다면 재시도 시 같은 이벤트가 다시 전달될 수 있을까요?
+
+- 확인할 핵심: 브로커 전송과 DB의 완료 기록은 별도 작업이다. 미완료로 남은 이벤트를 재전송하면 중복 전달이 가능하므로 소비자 멱등 처리가 필요하다.
+- 범위·출처: 완료 표시를 사용하는 가상 Relay 예시이며, [AWS Transactional outbox pattern](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html)의 전송·성공 후 삭제 구조와 중복 가능성에서 도출한 장애 상황이다.
+
+**멱등 처리 이해 확인:** 같은 이벤트가 중복 전달되어도 괜찮을까요? 재고 10개에서 이벤트 E1을 처리해 9개가 됐다면, 같은 E1을 다시 받았을 때 어떤 결과가 되어야 할까요?
+
+- 확인할 핵심: 중복 전달을 허용하려면 소비자가 중복 업무 반영을 막아야 한다. 같은 E1의 재전달에는 추가 차감 없이 9개를 유지한다. 처리한 ID의 기록과 업무 변경을 같은 DB 트랜잭션으로 묶고 ID의 유일성을 강제하는 방법이 있다.
+- 개념 상세: [[topics/kafka/concepts#Inbox 패턴 (컨슈머 멱등성)]]
+- 출처: [Idempotent Consumer — Chris Richardson](https://microservices.io/patterns/communication-style/idempotent-consumer.html).
+
+**트랜잭션 경계 이해 확인:** 업무 정보와 Outbox 이벤트를 이미 커밋한 뒤 Relay의 브로커 전송이 실패했다면, 이미 커밋한 업무 정보도 자동으로 롤백될까요?
+
+- 확인할 핵심: 자동 롤백되지 않는다. 보내는 쪽의 DB 커밋과 이후 Relay 전송, 받는 쪽의 DB 처리는 별도 단계다. 커밋된 Outbox 이벤트로 전달을 재시도한다.
+- 개념·출처: [[topics/kafka/concepts#Outbox와 소비자 처리의 트랜잭션 경계]]의 AWS 및 Idempotent Consumer 문서 참조.
+
 ---
 
 ## Consumer lag 진단 및 확장 전략
