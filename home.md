@@ -36,7 +36,11 @@ tags: [home, index]
 
 ### Database
 - [[topics/mysql/concepts]] / [[topics/mysql/questions]]
+- 성능 검증: [[topics/mysql/concepts#3. 커버링 인덱스 (Covering Index)]] → [[topics/mysql/concepts#EXPLAIN과 EXPLAIN ANALYZE의 차이]]
 - [[topics/redis/concepts]] / [[topics/redis/questions]]
+- 대기열: [[topics/redis/concepts#대기열의 순위와 입장 허용선]] → [[topics/redis/questions#Redis Sorted Set(ZSet)을 활용한 가상 대기열 시스템을 설계해주세요.]]
+- 응답 최적화: [[topics/redis/concepts#JSON 문자열 캐싱과 HTTP gzip]] → [[topics/redis/questions#JSON 문자열 캐싱과 gzip의 목적 구분]]
+- 캐시 최신성: [[topics/redis/concepts#상태 변경 후 캐시 무효화]] → [[topics/redis/questions#Cache-Aside 패턴과 write-around 캐시 무효화 순서]]
 - 기초 학습: [[topics/redis/concepts#락 임대 시간과 업무상 선점 유효 시간]] → [[topics/redis/questions#기초 이해 확인 — 락 만료와 선점 상태]]
 - [[topics/elasticsearch/concepts]] / [[topics/elasticsearch/questions]]
 
@@ -51,6 +55,8 @@ tags: [home, index]
 
 ### Architecture
 - [[topics/architecture/concepts]] / [[topics/architecture/questions]] — CAP, 분산 트랜잭션·Saga·Outbox, Circuit Breaker, Rate Limiting, 채팅·대기열 설계
+- 기초 학습: [[topics/architecture/concepts#Saga 보상과 DB 롤백의 차이]]
+- 성능 지표: [[topics/architecture/concepts#응답 시간의 평균과 p95]] → [[topics/architecture/questions#응답 시간 p95의 의미]]
 
 ### AI
 - [[topics/ai/concepts]] / [[topics/ai/questions]] — RAG, LLM, Claude Code 워크플로우

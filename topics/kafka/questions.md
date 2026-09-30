@@ -421,6 +421,16 @@ Kafka에 직접 발행하면 DB 트랜잭션은 롤백되어도 Kafka 메시지�
 - 확인할 핵심: 자동 롤백되지 않는다. 보내는 쪽의 DB 커밋과 이후 Relay 전송, 받는 쪽의 DB 처리는 별도 단계다. 커밋된 Outbox 이벤트로 전달을 재시도한다.
 - 개념·출처: [[topics/kafka/concepts#Outbox와 소비자 처리의 트랜잭션 경계]]의 AWS 및 Idempotent Consumer 문서 참조.
 
+**소비자 원자성 이해 확인:** 처리한 이벤트 ID만 먼저 커밋하고 업무 변경 전에 종료됐다면, 같은 이벤트를 재수신할 때 어떤 문제가 생길까요?
+
+- 확인할 핵심: 처리 ID만 보고 건너뛰면 미완료 업무가 누락될 수 있다. 같은 DB의 처리 ID 기록과 업무 변경을 하나의 트랜잭션으로 묶어 함께 커밋하거나 롤백한다. 동시 중복 처리에는 소비자 식별자와 이벤트 ID의 유일성 제약도 함께 적용한다.
+- 범위·근거: [[topics/kafka/concepts#Inbox 패턴 (컨슈머 멱등성)]]의 트랜잭션 원리를 잘못 분리한 가상 장애 상황에 적용한 질문. [Idempotent Consumer — Chris Richardson](https://microservices.io/patterns/communication-style/idempotent-consumer.html).
+
+**멱등 처리 검증:** 같은 이벤트 ID를 가진 메시지를 두 번 전달했을 때, Inbox에 해당 소비자의 처리 기록이 한 건이면 검증에 충분할까요?
+
+- 확인할 핵심: 실제 업무 결과도 한 번 처리한 결과와 같아야 한다. 초기 재고 10개에 1개 차감 이벤트를 같은 ID로 두 번 전달했다면 처리 기록 한 건과 최종 재고 9개를 함께 확인한다. 기록의 개수만으로 업무 중복 반영 여부를 확정하지 않는다.
+- 범위·근거: [[topics/kafka/concepts#Inbox 패턴 (컨슈머 멱등성)]]의 멱등성 정의를 가상 테스트의 검증 기준으로 적용한 질문. [Idempotent Consumer — Chris Richardson](https://microservices.io/patterns/communication-style/idempotent-consumer.html).
+
 ---
 
 ## Consumer lag 진단 및 확장 전략

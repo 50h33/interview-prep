@@ -116,6 +116,29 @@ related: [architecture, java, kubernetes, mysql, kafka, cs]
 - **Cache Miss**: 캐시에 없음 → DB 조회 후 캐시에 저장
 - **Hit Ratio** = Hit / (Hit + Miss) → 높을수록 DB 부하 감소
 
+### JSON 문자열 캐싱과 HTTP gzip
+
+- JSON 직렬화는 객체를 응답용 JSON 문자열로 바꾸는 작업이다. 완성된 JSON 문자열을 캐싱하고 hit 시 바로 반환하면 원본 DB 조회와 객체 구성, 같은 응답의 반복 직렬화를 줄일 수 있다. miss 시에는 조회·직렬화·캐시 저장이 필요하다.
+- HTTP gzip은 응답 본문을 압축해 전송 바이트를 줄이고 수신 측에서 복원하는 방식이다. 압축 자체가 DB 조회 결과를 재사용하지는 않으며 압축·해제 연산 비용이 든다. HTTP 배경은 [[topics/cs/concepts]] 참조.
+- 두 방법을 함께 쓰면 캐시에서 응답 JSON을 읽고 gzip으로 압축해 전송할 수 있다. 캐싱은 압축을 자동으로 수행하지 않으며 캐시된 응답의 최신성은 별도로 관리해야 한다.
+- 출처: [HTTP Content-Encoding](https://www.rfc-editor.org/rfc/rfc9110.html#section-8.4), [Redis cache-aside](https://redis.io/docs/latest/develop/use-cases/cache-aside/). 확인일: 2026-09-30.
+
+### 상태 변경 후 캐시 무효화
+
+- 원본 데이터가 바뀌면 캐시 값을 갱신하거나 기존 캐시를 삭제하여 오래된 응답의 재사용을 막는다. 삭제하는 방식을 무효화(invalidation)라고 한다.
+- Cache-Aside에서는 DB 변경 커밋 → 관련 캐시 삭제 → 다음 조회에서 miss → DB 조회·캐시 재생성 흐름을 사용할 수 있다. 아직 조회 요청이 없는 데이터는 즉시 다시 만들 필요가 없다.
+- 커밋 전에 삭제하면 다른 조회가 아직 변경 전인 DB 값을 읽어 캐시에 넣을 수 있다. 커밋 후 삭제도 이미 진행 중인 오래된 조회의 재적재나 삭제 실패를 모두 막지는 못한다.
+- TTL은 개별 캐시 항목을 저장 후 일정 시간이 지나면 만료시킨다. 즉시 최신성을 보장하는 장치는 아니므로 조회 캐시의 표시 상태와 실제 변경 허용 여부의 검증을 구분한다.
+- 관련 질문: [[topics/redis/questions#Cache-Aside 패턴과 write-around 캐시 무효화 순서]]. 출처: [Redis cache-aside](https://redis.io/docs/latest/develop/use-cases/cache-aside/).
+
+#### 삭제 뒤 오래된 조회 결과가 다시 저장되는 경합
+
+- 읽기 요청이 변경 전 DB 값을 읽음 → 쓰기 요청이 커밋 후 캐시 삭제 → 읽기 요청이 오래된 값을 캐시에 저장하는 순서가 가능하다. 커밋 후 삭제와 TTL만으로 이 재적재 자체를 차단하지는 못한다.
+- 설계 예시: 캐시 본문과 별도로 세대 번호를 유지한다. 읽기는 새 DB 조회 전에 세대 번호를 캡처한다. 쓰기는 커밋 후 Redis에서 세대 증가와 캐시 삭제를 한 원자 작업으로 수행한다. 읽기는 캡처한 세대가 현재 세대와 같을 때만 캐시를 저장하며 비교와 저장도 원자적으로 수행한다.
+- Redis Lua 또는 WATCH/MULTI/EXEC로 조건부 저장을 구현할 수 있다. 세대가 달라지면 오래된 결과를 캐시에 넣지 않고 필요에 따라 다시 조회한다. 단순 GET 비교 후 별도 SET은 비교와 저장 사이의 변경을 막지 못한다.
+- 전제와 한계: 모든 관련 쓰기가 같은 규칙을 따르고 세대 번호의 삭제·만료·재사용을 통제해야 한다. 세대 캡처 뒤에도 이미 열린 옛 DB 스냅샷이나 지연된 복제본을 읽으면 최신성이 보장되지 않는다. DB 커밋과 Redis 변경은 별도 작업이므로 장애 시 무효화 전달 실패도 별도로 처리해야 한다. 이 설계는 특정 재적재 경합을 막으며 모든 시점의 DB·캐시 일치를 보장하지 않는다.
+- 공식 연산 근거: [Redis transactions](https://redis.io/docs/latest/interact/transactions/), [Redis Lua atomic execution](https://redis.io/docs/latest/develop/programmability/eval-intro/). 세대 기반 흐름은 이 연산을 조합한 설계 예시다.
+
 ### 캐시 읽기 전략
 | 전략 | 동작 | 특징 |
 |---|---|---|
@@ -135,6 +158,16 @@ related: [architecture, java, kubernetes, mysql, kafka, cs]
 - **TTL Jitter**: `ttl = base_ttl + random(0, base_ttl * 0.1)` → 대량 동시 만료 방지
 
 ---
+
+## 대기열의 순위와 입장 허용선
+
+- Sorted Set의 member에 사용자 식별자를, score에 시각이나 순번을 저장하고 ZRANK로 0부터 시작하는 순위를 조회할 수 있다. 시각이 같으면 별도의 동점 정책이 필요하며 실제 클릭 순서를 자동 보장하지 않는다.
+- 허용선 방식은 `누적 허용 인원 = floor(개시 후 경과 초 × 허용률)`로 계산하고 `rank < 누적 허용 인원`인 사용자의 상태 조회에서 입장을 허용한다. 허용된 사용자를 집합에 유지한다면 ZCARD는 현재 미입장 인원과 다르므로 구분해야 한다.
+- 예를 들어 허용률이 10명/s이면 개시 1초 뒤 rank 0~9, 2초 뒤 0~19가 허용 범위다. 이는 누적 자격 판정이며, 늦은 폴링으로 여러 사용자가 함께 입장할 수 있어 매초 통과 수의 엄격한 상한과 다르다. 개시 시점과 늦게 들어온 사용자의 정책도 설계에 포함한다.
+- `ZRANK`로 존재를 확인한 뒤 별도 `ZADD`를 수행하면 두 동시 요청이 모두 신규로 판단할 수 있다. 동일 member의 중복 항목은 없지만 최초 score가 덮어써질 수 있다. `ZADD NX` 조건부 삽입과 여러 명령의 원자 처리를 구분한다.
+- 폴링 요청량은 대략 대기 인원/조회 간격이다. 서버가 간격을 안내해도 클라이언트가 따르는지와 서버 측 제한은 별도 문제다. 지연된 조회·다중 인스턴스·토큰 만료·저장소 장애를 함께 고려한다.
+- 입장 토큰은 업무 경로 접근을 허용한다. 좌석 확보·재고 차감의 정확성은 [[topics/java/concepts]]와 [[topics/architecture/concepts]]의 동시성·업무 상태 검증에 달려 있다.
+- 질문 상세: [[topics/redis/questions#Redis Sorted Set(ZSet)을 활용한 가상 대기열 시스템을 설계해주세요.]]. 출처: [Redis ZADD](https://redis.io/docs/latest/commands/zadd/), [Redis ZRANK](https://redis.io/docs/latest/commands/zrank/). 허용선은 이 연산을 사용하는 일반 설계 예시다.
 
 ## Java 클라이언트 — Lettuce vs Redisson
 

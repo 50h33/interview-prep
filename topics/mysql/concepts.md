@@ -45,16 +45,21 @@ WHERE status = 'active' AND created_at > '2026-01-01' ORDER BY created_at DESC
 
 ## 3. 커버링 인덱스 (Covering Index)
 
-SELECT 하는 컬럼이 **모두 인덱스에 포함**되면 실제 row에 접근하지 않아도 됨.
+커버링 인덱스는 **특정 쿼리에 필요한 컬럼을 모두 인덱스에서 얻을 수 있는 경우**를 말한다. SELECT 결과뿐 아니라 WHERE 조건 등 쿼리에서 사용하는 컬럼도 함께 확인한다. 별도의 인덱스 종류라기보다 해당 쿼리와 인덱스의 관계다.
 
 ```sql
 -- 인덱스: (user_id, status, created_at)
 SELECT user_id, status, created_at FROM orders WHERE user_id = 1;
--- → 인덱스만으로 완결 → 실제 row I/O 없음 → 빠름
+-- → 필요한 컬럼을 인덱스에서 얻어 테이블 행의 추가 조회를 줄일 수 있음
 ```
 
 - EXPLAIN에서 `Using index` 가 나오면 커버링 인덱스 활용 중
 - 자주 조회하는 컬럼 조합을 인덱스에 포함시켜 I/O 대폭 감소 가능
+
+일반적인 보조 인덱스 조회는 인덱스에서 대상의 PK를 찾은 뒤, 필요한 나머지 값을 얻으려고 테이블 행을 조회할 수 있다. 쿼리에 필요한 값이 인덱스에 모두 있으면 이 추가 조회를 생략할 수 있는 것이 커버링의 이점이다. 다만 인덱스 자체는 읽어야 하고, InnoDB의 MVCC 가시성 확인 때문에 테이블 행을 조회하는 경우도 있으므로 물리 디스크 I/O가 항상 0이라고 설명하지 않는다.
+
+- `Using index condition`은 인덱스 조건 푸시다운 표시로, `Using index`와 같은 뜻이 아니다.
+- 출처: [MySQL EXPLAIN Output](https://dev.mysql.com/doc/refman/8.4/en/explain-output.html), [InnoDB Multi-Versioning](https://dev.mysql.com/doc/refman/8.4/en/innodb-multi-versioning.html).
 
 ---
 
@@ -101,6 +106,18 @@ EXPLAIN SELECT * FROM orders WHERE user_id = 1 AND status = 'active';
 - `key`: 실제로 사용된 인덱스명
 - `rows`: 예상 스캔 행 수 (적을수록 좋음)
 - `Extra`: `Using index`(커버링), `Using filesort`(정렬 인덱스 미활용) 확인
+
+### EXPLAIN과 EXPLAIN ANALYZE의 차이
+
+일반 `EXPLAIN`은 옵티마이저가 선택한 실행 계획을 보여주며 비용과 행 수는 추정값이다. 쿼리의 실제 경과 시간을 보여주는 도구로 해석하지 않는다. `EXPLAIN ANALYZE`는 쿼리를 실제 실행하고 `actual time`, 실제 행 수, 반복 횟수 등을 보여준다. 각 실행 단계의 시간은 밀리초 단위이며 반복 실행된 단계에서는 루프당 평균이다. 부모 단계에 자식 단계 시간이 포함되므로 모든 단계의 시간을 합산하지 않는다.
+
+두 도구로 보는 DB 실행 경로와 API 응답 시간은 측정 범위가 다르다. 서버 요청에는 DB 연결 대기·애플리케이션 처리·직렬화 등의 시간도 포함될 수 있다. 실행 계획에서 커버링을 확인한 뒤 실제 성능 개선은 데이터량·요청 부하·서버 자원·캐시 조건 등을 맞춘 전후 측정으로 검증한다.
+
+- 출처: [MySQL 8.4 — EXPLAIN Statement / EXPLAIN ANALYZE](https://dev.mysql.com/doc/refman/8.4/en/explain.html). API와 DB의 측정 범위 구분은 문서의 DB 실행 계측 범위를 바탕으로 한 설명이다.
+
+**부하 단위 읽기:** k6에서 iteration은 시나리오 함수를 한 번 실행하는 단위다. arrival-rate 방식의 `240 iters/s` 부하 설정은 매초 240회의 반복을 시작하려는 목표이며, 실제 완료 또는 성공 처리량을 뜻하지 않는다. 한 반복에 HTTP 요청이 여러 개 있으면 반복률과 HTTP 요청률(RPS)은 다르다. 동시에 실행하는 가상 사용자 수(VU)와도 구분한다. 사용 가능한 VU가 부족해 시작하지 못한 반복은 `dropped_iterations`로 나타날 수 있다.
+
+- 출처: [Grafana k6 — Ramping arrival rate](https://grafana.com/docs/k6/latest/using-k6/scenarios/executors/ramping-arrival-rate/), [Arrival-rate VU allocation](https://grafana.com/docs/k6/latest/using-k6/scenarios/concepts/arrival-rate-vu-allocation/).
 
 ---
 

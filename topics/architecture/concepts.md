@@ -262,3 +262,23 @@ redisTemplate.convertAndSend("room:" + roomId, msg);
 - API 설계 패턴 (REST vs gRPC vs GraphQL)
 - 대용량 파일 업로드 시스템 설계
 - 분산 스케줄러 설계
+
+## Saga 보상과 DB 롤백의 차이
+
+Saga에서는 각 단계가 별도의 로컬 DB 트랜잭션으로 커밋된다. 이후 단계가 실패해도 앞서 커밋한 트랜잭션이 자동으로 롤백되지는 않는다. 이미 완료된 작업의 효과를 취소하거나 조정할 필요가 있으면 새로운 업무 작업과 트랜잭션으로 보상한다. 예를 들어 주문을 삭제하는 대신 취소 상태로 변경할 수 있으며, 구체적인 보상은 업무 규칙에 따라 정한다.
+
+보상은 다른 요청의 변경까지 지우며 과거 상태를 그대로 복원하는 작업이 아니다. 보상 자체도 실패하거나 재시도될 수 있으므로 진행 상태를 추적하고 중복 실행에 안전하도록 설계한다. [[topics/kafka/concepts#Outbox와 소비자 처리의 트랜잭션 경계]]에서 다루는 이벤트 전달·멱등 처리와 함께 쓰더라도 전체 업무가 하나의 DB 트랜잭션이 되는 것은 아니다.
+
+## 응답 시간의 평균과 p95
+
+- 평균은 측정한 응답 시간의 합을 요청 수로 나눈 값이다. p95는 응답 시간 분포의 95번째 백분위로, 측정 대상 요청의 약 95%가 그 시간 이내에 응답했다는 뜻으로 해석한다.
+- 요청 100개를 빠른 순으로 정렬했을 때 대략 95번째 위치라고 생각하면 쉽다. 실제 도구는 보간이나 히스토그램 추정을 사용할 수 있으므로 항상 정확히 95번째 표본과 같지는 않다.
+- p95는 평균이나 최대값이 아니며 성공률도 아니다. 나머지 약 5%의 느린 요청은 별도로 살펴야 한다. 평균만으로는 일부 요청이 겪는 긴 지연을 구분하기 어려워 p95·p99와 오류율을 함께 본다.
+- p95는 이상치를 제거하고 남은 응답 시간을 평균 낸 값이 아니다. 예를 들어 요청 100개 중 90개가 0.1초, 10개가 5초라면 평균은 0.59초지만 p95는 5초다. 평균이 1초 미만이어도 요청의 10%가 5초를 기다리는 분포를 구분할 수 있다. 이는 설명용 가상 데이터다.
+- 지표의 대상 API·측정 구간·성공 요청만 포함했는지 등의 집계 범위를 확인한다. [[topics/mysql/concepts#EXPLAIN과 EXPLAIN ANALYZE의 차이]]의 DB 실행시간과 API 응답 시간 구분도 적용된다.
+- 출처: [Grafana k6 Thresholds](https://grafana.com/docs/k6/latest/using-k6/thresholds/), 확인일 2026-09-30.
+
+## Saga 참고 링크
+
+- [Microsoft — Saga distributed transactions pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/saga)
+- [Microsoft — Compensating Transaction pattern](https://learn.microsoft.com/en-us/azure/architecture/patterns/compensating-transaction)
